@@ -1,66 +1,97 @@
-#include <Arduino.h>
-#include <MD_TCS230.h>
+#define BUTTON_PIN0 9
+#define BUTTON_PIN1 10
+#define BUTTON_PIN2 11
+#define RED_PIN 3
+#define GREEN_PIN 6
+#define BLUE_PIN 5
+#define TIME1 250
+#define TIME2 80
+#define NUMBER_OF_COMPONENTS 3
+#define BRIGHT_VALUE 8
 
-#define  S0_OUT  2
-#define  S1_OUT  3
-#define  S2_OUT  4
-#define  S3_OUT  5
+unsigned char redBright = BRIGHT_VALUE;
+unsigned char greenBright = BRIGHT_VALUE;
+unsigned char blueBright = BRIGHT_VALUE;
 
-#define R_OUT 6
-#define G_OUT 7
-#define B_OUT 8
-
-MD_TCS230 colorSensor(S2_OUT, S3_OUT, S0_OUT, S1_OUT);
+char isUpButton0 = 1;
+char isUpButton1 = 1;
+char isUpButton2 = 1;
 
 void setup()
 {
-    Serial.begin(115200);
-    Serial.println("Started!");
-
-    sensorData whiteCalibration;
-    whiteCalibration.value[TCS230_RGB_R] = 0;
-    whiteCalibration.value[TCS230_RGB_G] = 0;
-    whiteCalibration.value[TCS230_RGB_B] = 0;
-
-    sensorData blackCalibration;
-    blackCalibration.value[TCS230_RGB_R] = 0;
-    blackCalibration.value[TCS230_RGB_G] = 0;
-    blackCalibration.value[TCS230_RGB_B] = 0;
-
-    colorSensor.begin();
-    colorSensor.setDarkCal(&blackCalibration);
-    colorSensor.setWhiteCal(&whiteCalibration);
-
-    pinMode(R_OUT, OUTPUT);
-    pinMode(G_OUT, OUTPUT);
-    pinMode(B_OUT, OUTPUT);
+    pinMode(BUTTON_PIN0, INPUT);
+    pinMode(BUTTON_PIN1, INPUT);
+    pinMode(BUTTON_PIN2, INPUT);
+    pinMode(RED_PIN, OUTPUT);
+    pinMode(GREEN_PIN, OUTPUT);
+    pinMode(BLUE_PIN, OUTPUT);
 }
 
-void loop() 
+void changeColorValue(int buttonPin, char *isUpButton, unsigned char *bright)
 {
-    colorData rgb;
-    colorSensor.read();
-
-    while (!colorSensor.available());
-
-    colorSensor.getRGB(&rgb);
-    print_rgb(rgb);
-    set_rgb_led(rgb);
+    if (digitalRead(buttonPin) == HIGH)
+    {
+        if (*isUpButton)
+        {
+            *bright += BRIGHT_VALUE;
+            *isUpButton = 0;
+        }
+    }
+    else
+        *isUpButton = 1;
 }
 
-void print_rgb(colorData rgb)
+void changeColorsValues()
 {
-  Serial.print(rgb.value[TCS230_RGB_R]);
-  Serial.print(" ");
-  Serial.print(rgb.value[TCS230_RGB_G]);
-  Serial.print(" ");
-  Serial.print(rgb.value[TCS230_RGB_B]);
-  Serial.println();
+    changeColorValue(BUTTON_PIN0, &isUpButton0, &redBright);
+    changeColorValue(BUTTON_PIN1, &isUpButton1, &greenBright);
+    changeColorValue(BUTTON_PIN2, &isUpButton2, &blueBright);
 }
 
-void set_rgb_led(colorData rgb)
+void setValueByPin(int pin, int value, int time)
 {
-    analogWrite(R_OUT, 255 - rgb.value[TCS230_RGB_R]);
-    analogWrite(G_OUT, 255 - rgb.value[TCS230_RGB_G]);
-    analogWrite(B_OUT, 255 - rgb.value[TCS230_RGB_B]);
+    changeColorsValues();
+    analogWrite(pin, value);
+    delay(time);
+}
+
+void changeColorLEDSmoothly(int colorPin1, int colorValue1, int colorPin2, int colorValue2)
+{
+    setValueByPin(colorPin1, colorValue1, TIME1);
+    setValueByPin(colorPin2, colorValue2, TIME1);
+    changeColorsValues();
+    analogWrite(colorPin1, 0);
+}
+
+void changeColorLEDBlinking(int colorPin1, int colorValue1, int colorPin2, int colorValue2)
+{
+    int i;
+    for (i = 0; i < NUMBER_OF_COMPONENTS; ++i)
+    {
+        setValueByPin(colorPin1, colorValue1, TIME2);
+        setValueByPin(colorPin1, 0, TIME2);
+    }
+    for (i = 0; i < NUMBER_OF_COMPONENTS; ++i)
+    {
+        analogWrite(colorPin1, colorValue1);
+        setValueByPin(colorPin2, colorValue2, TIME2);
+        analogWrite(colorPin1, 0);
+        setValueByPin(colorPin2, 0, TIME2);
+    }
+}
+
+void loop()
+{
+    changeColorLEDSmoothly(RED_PIN, redBright, GREEN_PIN, greenBright);
+    changeColorLEDSmoothly(GREEN_PIN, greenBright, BLUE_PIN, blueBright);
+    changeColorLEDSmoothly(BLUE_PIN, blueBright, RED_PIN, redBright);
+    analogWrite(RED_PIN, 0);
+    delay(TIME1);
+    changeColorsValues();
+
+    changeColorLEDBlinking(RED_PIN, redBright, GREEN_PIN, greenBright);
+    changeColorLEDBlinking(GREEN_PIN, greenBright, BLUE_PIN, blueBright);
+    changeColorLEDBlinking(BLUE_PIN, blueBright, RED_PIN, redBright);
+    changeColorsValues();
+    delay(TIME1 - TIME2);
 }
